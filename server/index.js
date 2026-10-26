@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 
 const app = express();
 const PORT = Number(process.env.PORT || 8787);
-const OLLAMA_URL = (process.env.OLLAMA_URL || 'http://127.0.0.1:11434').replace(/\/$/, '');
+const OLLAMA_URL = (process.env.OLLAMA_URL || 'https://ollama.com').replace(/\/$/, '');
 const OLLAMA_MODEL = process.env.OLLAMA_MODEL || 'gemma3:4b';
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 12 * 1024 * 1024, files: 10 } });
 app.use(cors({ origin: true }));
@@ -61,7 +61,10 @@ function parseModelJson(raw) {
 }
 async function analyzeWithOllama(doc) {
   const prompt = `You are Obligation Zero, a careful document-to-action assistant. Extract only actions that are explicitly supported by the document. Never invent a date, deadline, person, obligation, or quoted sentence. If a date is ambiguous, set deadline to null. Return JSON only with shape: {"summary":"one short sentence","actions":[{"title":"short imperative title","description":"short explanation","deadline":"exact date/time stated or null","priority":"Urgent|Normal|Can wait|Needs review","category":"Task|Reply|Read|Payment|Appointment","evidence":"an exact verbatim sentence copied from document","draft":"optional short reply draft or empty string"}]}. Evidence must be an exact sentence from the source. Return at most 8 actions. Do not include generic advice. If no actions, return an empty actions array.\n\nDOCUMENT: ${doc.name}\nTEXT:\n${doc.text.slice(0, 24000)}`;
-  const response = await fetch(`${OLLAMA_URL}/api/chat`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ model: OLLAMA_MODEL, stream: false, format: 'json', messages: [{ role: 'system', content: 'Respond with valid JSON only.' }, { role: 'user', content: prompt }], options: { temperature: 0.1 } }) });
+  const response = await fetch(`${OLLAMA_URL}/api/chat`, { method: 'POST', headers: {
+  'Content-Type': 'application/json',
+  'Authorization': `Bearer ${process.env.OLLAMA_API_KEY}`
+}, body: JSON.stringify({ model: OLLAMA_MODEL, stream: false, format: 'json', messages: [{ role: 'system', content: 'Respond with valid JSON only.' }, { role: 'user', content: prompt }], options: { temperature: 0.1 } }) });
   if (!response.ok) {
     const detail = await response.text().catch(() => '');
     throw new Error(`Ollama returned ${response.status}. Is Ollama running and model ${OLLAMA_MODEL} installed? ${detail.slice(0, 160)}`);
@@ -142,7 +145,10 @@ app.post('/api/draft', async (req, res) => {
   const { sourceText = '', action = '', tone = 'Professional' } = req.body || {};
   if (!sourceText.trim() || !action.trim()) return res.status(400).json({ error: 'Source text and action are required.' });
   try {
-    const r = await fetch(`${OLLAMA_URL}/api/chat`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ model: OLLAMA_MODEL, stream: false, messages: [{ role: 'system', content: 'Draft a concise reply based only on supplied context. Do not invent commitments or claim actions have happened. Return only the reply body.' }, { role: 'user', content: `Tone: ${tone}\nAction: ${action}\nSource: ${sourceText.slice(0, 10000)}\nWrite a reply draft.` }], options: { temperature: 0.3 } }) });
+    const r = await fetch(`${OLLAMA_URL}/api/chat`, { method: 'POST', headers: {
+  'Content-Type': 'application/json',
+  'Authorization': `Bearer ${process.env.OLLAMA_API_KEY}`
+}, body: JSON.stringify({ model: OLLAMA_MODEL, stream: false, messages: [{ role: 'system', content: 'Draft a concise reply based only on supplied context. Do not invent commitments or claim actions have happened. Return only the reply body.' }, { role: 'user', content: `Tone: ${tone}\nAction: ${action}\nSource: ${sourceText.slice(0, 10000)}\nWrite a reply draft.` }], options: { temperature: 0.3 } }) });
     if (!r.ok) throw new Error('Ollama is unavailable. Start Ollama and install the configured model.');
     const data = await r.json();
     res.json({ draft: data.message?.content?.trim() || '' });
