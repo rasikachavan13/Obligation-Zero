@@ -2,6 +2,8 @@
 
 A privacy-first document-to-action assistant. Upload everyday paperwork, extract text locally, ask an open-weight model served by Ollama to propose action items, and review each suggestion against the original source sentence.
 
+Live Demo: https://obligation-zero.onrender.com/
+
 ## Stack
 
 - React + Vite + TypeScript frontend
